@@ -1,6 +1,7 @@
 
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "@better-auth/mongo-adapter";
+import { admin } from "better-auth/plugins";
 
 import { connectDB, getMongoClient } from "../config/db.js";
 
@@ -29,4 +30,15 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
+
+  // Admin Plugin
+  plugins: [
+    admin({
+      // সকল নতুন user-এর default role
+      defaultRole: "user",
+
+      // এই role-টি Admin হিসেবে গণ্য হবে
+      adminRoles: ["admin"],
+    }),
+  ],
 });
