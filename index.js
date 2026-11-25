@@ -9,10 +9,15 @@ import { auth } from "./auth/auth.js";
 
 import { connectDB, getDB } from "./config/db.js";
 
+// Protected API Routes
+import protectedRoutes from "./routes/protected.routes.js";
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// CORS configuration
+// ========================================
+// CORS CONFIGURATION
+// ========================================
 app.use(
   cors({
     origin: process.env.CLIENT_URL || "http://localhost:3000",
@@ -20,15 +25,21 @@ app.use(
   })
 );
 
-// Better Auth handler
+// ========================================
+// BETTER AUTH HANDLER
+// ========================================
 // Express 5 catch-all route
 app.all("/api/auth/*splat", toNodeHandler(auth));
 
-// Body parser (Better Auth route-এর পরে)
+// ========================================
+// BODY PARSER
+// ========================================
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Home route
+// ========================================
+// HOME ROUTE
+// ========================================
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
@@ -37,7 +48,9 @@ app.get("/", (req, res) => {
   });
 });
 
-// Health check
+// ========================================
+// HEALTH CHECK
+// ========================================
 app.get("/api/v1/health", (req, res) => {
   res.status(200).json({
     success: true,
@@ -46,7 +59,9 @@ app.get("/api/v1/health", (req, res) => {
   });
 });
 
-// MongoDB test
+// ========================================
+// MONGODB TEST
+// ========================================
 app.get("/api/v1/test-db", async (req, res, next) => {
   try {
     const db = getDB();
@@ -63,7 +78,15 @@ app.get("/api/v1/test-db", async (req, res, next) => {
   }
 });
 
-// 404 handler
+// ========================================
+// PROTECTED API ROUTES
+// ========================================
+// Authentication and Admin authorization
+app.use("/api/v1/protected", protectedRoutes);
+
+// ========================================
+// 404 HANDLER
+// ========================================
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -72,7 +95,9 @@ app.use((req, res) => {
   });
 });
 
-// Global error handler
+// ========================================
+// GLOBAL ERROR HANDLER
+// ========================================
 app.use((error, req, res, next) => {
   console.error("❌ Server Error:", error.message);
 
@@ -82,7 +107,9 @@ app.use((error, req, res, next) => {
   });
 });
 
-// Start server
+// ========================================
+// START SERVER
+// ========================================
 async function startServer() {
   try {
     await connectDB();
@@ -94,6 +121,9 @@ async function startServer() {
       console.log(`Health: http://localhost:${PORT}/api/v1/health`);
       console.log(`Database: http://localhost:${PORT}/api/v1/test-db`);
       console.log(`Auth: http://localhost:${PORT}/api/auth`);
+      console.log(
+        `Protected: http://localhost:${PORT}/api/v1/protected`
+      );
       console.log("-----------------------------------");
     });
   } catch (error) {
