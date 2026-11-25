@@ -1,4 +1,3 @@
-
 import "dotenv/config";
 
 import express from "express";
@@ -9,8 +8,9 @@ import { auth } from "./auth/auth.js";
 
 import { connectDB, getDB } from "./config/db.js";
 
-// Protected API Routes
+// API Routes
 import protectedRoutes from "./routes/protected.routes.js";
+import userRoutes from "./routes/user.routes.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -85,6 +85,12 @@ app.get("/api/v1/test-db", async (req, res, next) => {
 app.use("/api/v1/protected", protectedRoutes);
 
 // ========================================
+// USER PROFILE ROUTES
+// ========================================
+// Get Profile and Update Profile
+app.use("/api/v1/users", userRoutes);
+
+// ========================================
 // 404 HANDLER
 // ========================================
 app.use((req, res) => {
@@ -121,9 +127,8 @@ async function startServer() {
       console.log(`Health: http://localhost:${PORT}/api/v1/health`);
       console.log(`Database: http://localhost:${PORT}/api/v1/test-db`);
       console.log(`Auth: http://localhost:${PORT}/api/auth`);
-      console.log(
-        `Protected: http://localhost:${PORT}/api/v1/protected`
-      );
+      console.log(`Protected: http://localhost:${PORT}/api/v1/protected`);
+      console.log(`Users: http://localhost:${PORT}/api/v1/users`);
       console.log("-----------------------------------");
     });
   } catch (error) {
