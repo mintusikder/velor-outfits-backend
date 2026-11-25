@@ -1,3 +1,4 @@
+
 import "dotenv/config";
 
 import express from "express";
@@ -7,6 +8,7 @@ import { toNodeHandler } from "better-auth/node";
 import { auth } from "./auth/auth.js";
 
 import { connectDB, getDB } from "./config/db.js";
+import { initializeProductIndexes } from "./config/productIndexes.js";
 
 // API Routes
 import protectedRoutes from "./routes/protected.routes.js";
@@ -118,8 +120,13 @@ app.use((error, req, res, next) => {
 // ========================================
 async function startServer() {
   try {
+    // 1. Connect MongoDB
     await connectDB();
 
+    // 2. Initialize Product Indexes
+    await initializeProductIndexes();
+
+    // 3. Start Express Server
     app.listen(PORT, () => {
       console.log("-----------------------------------");
       console.log("VELOR OUTFITS BACKEND");
@@ -129,6 +136,7 @@ async function startServer() {
       console.log(`Auth: http://localhost:${PORT}/api/auth`);
       console.log(`Protected: http://localhost:${PORT}/api/v1/protected`);
       console.log(`Users: http://localhost:${PORT}/api/v1/users`);
+      console.log(`Products: http://localhost:${PORT}/api/v1/products`);
       console.log("-----------------------------------");
     });
   } catch (error) {
