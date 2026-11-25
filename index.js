@@ -1,21 +1,18 @@
 
-const express = require("express");
-const cors = require("cors");
-const dotenv = require("dotenv");
+import "dotenv/config";
 
-const { connectDB, getDB } = require("./config/db");
+import express from "express";
+import cors from "cors";
 
-// Load environment variables
-dotenv.config();
+import { toNodeHandler } from "better-auth/node";
+import { auth } from "./auth/auth.js";
+
+import { connectDB, getDB } from "./config/db.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ========================================
-// 1. MIDDLEWARE
-// ========================================
-
-// CORS
+// CORS configuration
 app.use(
   cors({
     origin: process.env.CLIENT_URL || "http://localhost:3000",
@@ -23,16 +20,15 @@ app.use(
   })
 );
 
-// Parse JSON data
-app.use(express.json());
+// Better Auth handler
+// Express 5 catch-all route
+app.all("/api/auth/*splat", toNodeHandler(auth));
 
-// Parse URL-encoded data
+// Body parser (Better Auth route-এর পরে)
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ========================================
-// 2. ROOT ROUTE
-// ========================================
-
+// Home route
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
@@ -41,10 +37,7 @@ app.get("/", (req, res) => {
   });
 });
 
-// ========================================
-// 3. HEALTH CHECK ROUTE
-// ========================================
-
+// Health check
 app.get("/api/v1/health", (req, res) => {
   res.status(200).json({
     success: true,
@@ -53,10 +46,7 @@ app.get("/api/v1/health", (req, res) => {
   });
 });
 
-// ========================================
-// 4. DATABASE TEST ROUTE
-// ========================================
-
+// MongoDB test
 app.get("/api/v1/test-db", async (req, res, next) => {
   try {
     const db = getDB();
@@ -73,10 +63,7 @@ app.get("/api/v1/test-db", async (req, res, next) => {
   }
 });
 
-// ========================================
-// 5. 404 NOT FOUND HANDLER
-// ========================================
-
+// 404 handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -85,12 +72,9 @@ app.use((req, res) => {
   });
 });
 
-// ========================================
-// 6. GLOBAL ERROR HANDLER
-// ========================================
-
+// Global error handler
 app.use((error, req, res, next) => {
-  console.error("Server Error:", error.message);
+  console.error("❌ Server Error:", error.message);
 
   res.status(error.status || 500).json({
     success: false,
@@ -98,29 +82,24 @@ app.use((error, req, res, next) => {
   });
 });
 
-// ========================================
-// 7. START SERVER
-// ========================================
-
+// Start server
 async function startServer() {
   try {
-    // Connect to MongoDB first
     await connectDB();
 
-    // Start Express server
     app.listen(PORT, () => {
       console.log("-----------------------------------");
       console.log("VELOR OUTFITS BACKEND");
       console.log(`Server: http://localhost:${PORT}`);
       console.log(`Health: http://localhost:${PORT}/api/v1/health`);
       console.log(`Database: http://localhost:${PORT}/api/v1/test-db`);
+      console.log(`Auth: http://localhost:${PORT}/api/auth`);
       console.log("-----------------------------------");
     });
   } catch (error) {
-    console.error("Failed to start server:", error.message);
+    console.error("❌ Server failed to start:", error.message);
     process.exit(1);
   }
 }
 
-// Run server
 startServer();

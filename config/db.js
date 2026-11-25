@@ -1,46 +1,52 @@
 
-const { MongoClient } = require("mongodb");
+import { MongoClient } from "mongodb";
 
 let client;
 let db;
+let connectionPromise;
 
-async function connectDB() {
-  try {
-    // Environment variables
-    const uri = process.env.MONGODB_URI;
-    const dbName = process.env.MONGODB_DB || "velor_outfits";
+export async function connectDB() {
+  if (db) return db;
+  if (connectionPromise) return connectionPromise;
 
-    // Check MongoDB URI
-    if (!uri) {
-      throw new Error("MONGODB_URI is missing in .env file");
-    }
+  const uri = process.env.MONGODB_URI;
+  const dbName = process.env.MONGODB_DB || "velor_outfits";
 
-    // Create MongoDB client
-    if (!client) {
-      client = new MongoClient(uri);
-    }
-
-    // Connect to MongoDB
-    await client.connect();
-
-    // Select database
-    db = client.db(dbName);
-
-    // Test database connection
-    await db.command({ ping: 1 });
-
-    console.log("✅ MongoDB connected successfully!");
-    console.log(`📦 Database: ${db.databaseName}`);
-
-    return db;
-  } catch (error) {
-    console.error("❌ MongoDB connection failed:", error.message);
-    throw error;
+  if (!uri) {
+    throw new Error("MONGODB_URI is missing in .env file");
   }
+
+  client = new MongoClient(uri);
+
+  connectionPromise = client
+    .connect()
+    .then(async (connectedClient) => {
+      db = connectedClient.db(dbName);
+
+      await db.command({ ping: 1 });
+
+      console.log("✅ MongoDB connected successfully!");
+      console.log(`📦 Database: ${db.databaseName}`);
+
+      return db;
+    })
+    .catch((error) => {
+      connectionPromise = null;
+      client = null;
+      db = null;
+
+      console.error(
+        "❌ MongoDB connection failed:",
+        error.message
+      );
+
+      throw error;
+    });
+
+  return connectionPromise;
 }
 
-// Get database instance
-function getDB() {
+export function getDB() {
   if (!db) {
     throw new Error("Database is not connected yet!");
   }
@@ -48,8 +54,11 @@ function getDB() {
   return db;
 }
 
-// Export functions
-module.exports = {
-  connectDB,
-  getDB,
-};
+// Better Auth adapter-এর জন্য MongoClient
+export function getMongoClient() {
+  if (!client) {
+    throw new Error("MongoDB client is not connected yet!");
+  }
+
+  return client;
+}
