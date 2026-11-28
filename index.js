@@ -11,6 +11,7 @@ import { connectDB, getDB } from "./config/db.js";
 import { initializeProductIndexes } from "./config/productIndexes.js";
 
 // API Routes
+import productRoutes from "./routes/product.routes.js";
 import protectedRoutes from "./routes/protected.routes.js";
 import userRoutes from "./routes/user.routes.js";
 
@@ -91,6 +92,22 @@ app.use("/api/v1/protected", protectedRoutes);
 // ========================================
 // Get Profile and Update Profile
 app.use("/api/v1/users", userRoutes);
+
+// ========================================
+// PRODUCT API ROUTES
+// ========================================
+// Public:
+// GET    /api/v1/products
+// GET    /api/v1/products/:id
+//
+// Admin:
+// GET    /api/v1/products/admin/all
+// GET    /api/v1/products/admin/:id
+// POST   /api/v1/products
+// PATCH  /api/v1/products/:id
+// DELETE /api/v1/products/:id
+
+app.use("/api/v1/products", productRoutes);
 
 // ========================================
 // 404 HANDLER
