@@ -2,6 +2,7 @@
 import { ObjectId } from "mongodb";
 
 import { getDB } from "../config/db.js";
+import { uploadImagesToImgBB } from "../services/imgbb.service.js";
 import {
   validateProduct,
   generateSlug,
@@ -45,10 +46,76 @@ function handleDuplicateKey(error, res) {
 
 export async function createProduct(req, res, next) {
   try {
-    const db = getDB();
-    const products = db.collection("products");
+    // ========================================
+    // 1. Parse Product Payload
+    // ========================================
 
-    const payload = req.body;
+    let payload = req.body;
+
+    // Frontend multipart/form-data পাঠালে
+    // Product JSON "product" field-এর ভিতরে থাকবে
+    if (typeof req.body.product === "string") {
+      try {
+        payload = JSON.parse(req.body.product);
+      } catch {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid product JSON data.",
+        });
+      }
+    }
+
+    if (
+      !payload ||
+      typeof payload !== "object" ||
+      Array.isArray(payload)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid product data.",
+      });
+    }
+
+    // ========================================
+    // 2. Normalize Numeric Fields
+    // ========================================
+
+    // Blank price যেন 0 হিসেবে valid না হয়ে যায়
+    if (
+      payload.price === "" ||
+      payload.price === null ||
+      payload.price === undefined
+    ) {
+      payload.price = NaN;
+    } else {
+      payload.price = Number(payload.price);
+    }
+
+    // Blank Sale Price = null
+    if (
+      payload.salePrice === "" ||
+      payload.salePrice === null ||
+      payload.salePrice === undefined
+    ) {
+      payload.salePrice = null;
+    } else {
+      payload.salePrice = Number(payload.salePrice);
+    }
+
+    // Stock
+    if (
+      payload.stock === "" ||
+      payload.stock === null ||
+      payload.stock === undefined
+    ) {
+      payload.stock = 0;
+    } else {
+      payload.stock = Number(payload.stock);
+    }
+
+    // ========================================
+    // 3. Product Validation
+    // ========================================
 
     const validation = validateProduct(payload);
 
@@ -60,46 +127,84 @@ export async function createProduct(req, res, next) {
       });
     }
 
-    const normalizedSKU = payload.sku.trim().toUpperCase();
+    // ========================================
+    // 4. MongoDB
+    // ========================================
 
-    const existingSKU = await products.findOne({
-      sku: normalizedSKU,
-    });
+    const db = getDB();
+    const products = db.collection("products");
+
+    // SKU normalize
+    const sku = payload.sku.trim().toUpperCase();
+
+    // Check duplicate SKU
+    const existingSKU = await products.findOne({ sku });
 
     if (existingSKU) {
       return res.status(409).json({
         success: false,
-        message: "Product SKU already exists.",
+        message: "A product with this SKU already exists.",
       });
     }
 
-    const slugBase = generateSlug(payload.name);
-    const slug = `${slugBase}-${generateSlug(normalizedSKU)}`;
+    // ========================================
+    // 5. Generate Product Slug
+    // ========================================
 
+    const baseSlug = generateSlug(payload.name);
+    const slug = `${baseSlug}-${generateSlug(sku)}`;
+
+    // Check duplicate Slug
     const existingSlug = await products.findOne({ slug });
 
     if (existingSlug) {
       return res.status(409).json({
         success: false,
-        message: "Product slug already exists.",
+        message: "A product with this slug already exists.",
       });
     }
 
-    const now = new Date();
+    // ========================================
+    // 6. Upload Images to ImgBB
+    // ========================================
+
+    const files = req.files || [];
+
+    let uploadedImages = [];
+
+    if (files.length > 0) {
+      uploadedImages = await uploadImagesToImgBB(files);
+    }
+
+    // Existing image URLs (if any)
+    const existingImages = Array.isArray(payload.images)
+      ? payload.images
+      : [];
+
+    // Uploaded ImgBB images + existing image URLs
+    const images = [
+      ...existingImages,
+      ...uploadedImages,
+    ];
+
+    // ========================================
+    // 7. Create Product Document
+    // ========================================
 
     const product = {
       name: payload.name.trim(),
       slug,
-      sku: normalizedSKU,
+      sku,
 
-      description: payload.description?.trim() || "",
+      description: payload.description || "",
       category: payload.category.trim(),
-      brand: payload.brand?.trim() || "VELOR OUTFITS",
+      brand: payload.brand || "VELOR OUTFITS",
 
       price: payload.price,
-      salePrice: payload.salePrice ?? null,
+      salePrice: payload.salePrice,
 
-      images: payload.images || [],
+      images,
+
       sizes: payload.sizes || [],
       colors: payload.colors || [],
       variants: payload.variants || [],
@@ -109,24 +214,31 @@ export async function createProduct(req, res, next) {
       status: payload.status || "draft",
       featured: payload.featured ?? false,
 
-      createdAt: now,
-      updatedAt: now,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
+
+    // ========================================
+    // 8. Save to MongoDB
+    // ========================================
 
     const result = await products.insertOne(product);
 
     return res.status(201).json({
       success: true,
       message: "Product created successfully.",
-      product: {
+      data: {
         ...product,
         _id: result.insertedId,
       },
     });
   } catch (error) {
+    // Duplicate SKU / Slug
     const duplicateResponse = handleDuplicateKey(error, res);
 
-    if (duplicateResponse) return duplicateResponse;
+    if (duplicateResponse) {
+      return duplicateResponse;
+    }
 
     next(error);
   }
@@ -150,12 +262,12 @@ export async function getAllProducts(req, res, next) {
       status: "active",
     };
 
-    // Category filter
+    // Category Filter
     if (req.query.category) {
       filter.category = req.query.category;
     }
 
-    // Featured filter
+    // Featured Filter
     if (req.query.featured === "true") {
       filter.featured = true;
     }
@@ -172,8 +284,11 @@ export async function getAllProducts(req, res, next) {
       ];
     }
 
-    // Price filter
-    if (req.query.minPrice !== undefined || req.query.maxPrice !== undefined) {
+    // Price Filter
+    if (
+      req.query.minPrice !== undefined ||
+      req.query.maxPrice !== undefined
+    ) {
       filter.price = {};
 
       if (req.query.minPrice !== undefined) {
@@ -257,14 +372,17 @@ export async function getAdminProducts(req, res, next) {
 
     const filter = {};
 
+    // Status Filter
     if (req.query.status) {
       filter.status = req.query.status;
     }
 
+    // Category Filter
     if (req.query.category) {
       filter.category = req.query.category;
     }
 
+    // Search
     if (req.query.search?.trim()) {
       const search = req.query.search.trim();
 
@@ -407,12 +525,32 @@ export async function updateProduct(req, res, next) {
       });
     }
 
-    // Merge with existing data to validate the full product
+    // Normalize numeric fields
+    if (updates.price !== undefined) {
+      updates.price = Number(updates.price);
+    }
+
+    if (
+      updates.salePrice !== undefined &&
+      updates.salePrice !== null &&
+      updates.salePrice !== ""
+    ) {
+      updates.salePrice = Number(updates.salePrice);
+    } else if (updates.salePrice === "") {
+      updates.salePrice = null;
+    }
+
+    if (updates.stock !== undefined) {
+      updates.stock = Number(updates.stock);
+    }
+
+    // Merge with existing data
     const mergedProduct = {
       ...existingProduct,
       ...updates,
     };
 
+    // Validate full product
     const validation = validateProduct(mergedProduct);
 
     if (!validation.valid) {
@@ -482,7 +620,9 @@ export async function updateProduct(req, res, next) {
   } catch (error) {
     const duplicateResponse = handleDuplicateKey(error, res);
 
-    if (duplicateResponse) return duplicateResponse;
+    if (duplicateResponse) {
+      return duplicateResponse;
+    }
 
     next(error);
   }
@@ -527,10 +667,10 @@ export async function deleteProduct(req, res, next) {
   }
 }
 
- // ========================================
- // GET SINGLE PRODUCT FOR ADMIN
- // GET /api/v1/products/admin/:id
- // ========================================
+// ========================================
+// GET SINGLE PRODUCT FOR ADMIN
+// GET /api/v1/products/admin/:id
+// ========================================
 
 export async function getAdminSingleProduct(req, res, next) {
   try {

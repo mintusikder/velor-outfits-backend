@@ -3,7 +3,7 @@ import { Router } from "express";
 
 import { verifyAuth } from "../middleware/verifyAuth.js";
 import { requireAdmin } from "../middleware/requireAdmin.js";
-
+import { uploadProductImages } from "../middleware/uploadImage.js";
 import {
   createProduct,
   getAllProducts,
@@ -51,6 +51,7 @@ router.post(
   "/",
   verifyAuth,
   requireAdmin,
+  uploadProductImages,
   createProduct
 );
 
